@@ -1,0 +1,140 @@
+#include <esp_now.h>
+#if defined(ARDUINO_ARCH_ESP8266)
+#include <ESP8266WiFi.h>
+#elif defined(ARDUINO_ARCH_ESP32)
+#include <WiFi.h>
+#endif
+
+
+#define sendf true
+
+
+#define CHANNEL 1
+#define PRINTSCANRESULTS 0
+esp_now_peer_info_t peers={};
+void setup() {
+  Serial.begin(115200);
+
+  delay(1000);
+  //put target MAC ADDRESS HERE  
+  peers.peer_addr[0]=0x30;//30:C6:F7:20:B2:01
+  peers.peer_addr[1]=0xc6;
+  peers.peer_addr[2]=0xf7;
+  peers.peer_addr[3]=0x20;
+  peers.peer_addr[4]=0xb2;
+  peers.peer_addr[5]=0x0c;
+
+
+  
+  peers.channel=CHANNEL;
+  peers.encrypt=0;
+  //Set device in AP mode to begin with
+  WiFi.mode(WIFI_STA);
+  // configDeviceAP();
+  //Serial.println("ESPNow/Multi-Slave/Master Example");
+  // This is the mac address of the Master in AP Mode
+  Serial.println();
+  Serial.print("AP MAC: "); Serial.println(WiFi.macAddress());
+  Serial.println();
+    InitESPNow();
+
+    
+    esp_err_t addStatus = esp_now_add_peer(&peers);
+        if (addStatus == ESP_OK) {
+          // Pair success
+          Serial.println("Peer added");
+        } else if (addStatus == ESP_ERR_ESPNOW_NOT_INIT) {
+          // How did we get so far!!
+          Serial.println("ESPNOW Not Init");
+        } else if (addStatus == ESP_ERR_ESPNOW_ARG) {
+          Serial.println("Add Peer - Invalid Argument");
+        } else if (addStatus == ESP_ERR_ESPNOW_FULL) {
+          Serial.println("Peer list full");
+        } else if (addStatus == ESP_ERR_ESPNOW_NO_MEM) {
+          Serial.println("Out of memory");
+        } else if (addStatus == ESP_ERR_ESPNOW_EXIST) {
+          Serial.println("Peer Exists");
+        } else {
+          Serial.println("Not sure what happened");
+        }
+
+        
+  esp_now_register_recv_cb(OnDataRecv);
+  esp_now_register_send_cb(OnDataSent);
+}
+
+void loop() {
+  delay(1000);
+  if(sendf)Send();
+}
+
+
+void configDeviceAP() {
+//  String Prefix = "Slave:";
+//  String Mac = WiFi.macAddress();
+  String SSID ="AP1";
+  String Password = "12345677";
+  bool result = WiFi.softAP(SSID.c_str(), Password.c_str(), CHANNEL, 0);
+  if (!result) {
+    Serial.println("AP Config failed.");
+  } else {
+    Serial.println("AP Config Success. Broadcasting with AP: " + String(SSID));
+  }
+}
+
+
+void OnDataRecv(const uint8_t *mac_addr, const uint8_t *data, int data_len) {
+  char macStr[18];
+  snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
+           mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+  Serial.print("Last Packet Recv from: "); Serial.println(macStr);
+  Serial.print("Last Packet Recv Data: "); Serial.println(*data);
+  Serial.println("");
+}
+
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  char macStr[18];
+  snprintf(macStr, sizeof(macStr), "%02x:%02x:%02x:%02x:%02x:%02x",
+           mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+  Serial.print("Last Packet Sent to: "); Serial.println(macStr);
+  Serial.print("Last Packet Send Status: "); Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+}
+
+void Send(){
+  //uint8_t data[10]={0xAA,0xAA,0xAA,0xAA,0xAA,0xAA,0xAA,0xAA,0xAA,0xAA};
+  const uint8_t *peer_addr = peers.peer_addr;//,*dataa=data;
+  
+uint8_t data = 50;
+  esp_err_t result = esp_now_send(peer_addr, &data, sizeof(data));
+    Serial.print("Send Status: ");
+    if (result == ESP_OK) {
+      Serial.println("Success");
+    } else if (result == ESP_ERR_ESPNOW_NOT_INIT) {
+      // How did we get so far!!
+      Serial.println("ESPNOW not Init.");
+    } else if (result == ESP_ERR_ESPNOW_ARG) {
+      Serial.println("Invalid Argument");
+    } else if (result == ESP_ERR_ESPNOW_INTERNAL) {
+      Serial.println("Internal Error");
+    } else if (result == ESP_ERR_ESPNOW_NO_MEM) {
+      Serial.println("ESP_ERR_ESPNOW_NO_MEM");
+    } else if (result == ESP_ERR_ESPNOW_NOT_FOUND) {
+      Serial.println("Peer not found.");
+    } else {
+      Serial.println("Not sure what happened");
+    }
+}
+
+void InitESPNow() {
+  WiFi.disconnect();
+  if (esp_now_init() == ESP_OK) {
+    Serial.println("ESPNow Init Success");
+  }
+  else {
+    Serial.println("ESPNow Init Failed");
+    // Retry InitESPNow, add a counte and then restart?
+    // InitESPNow();
+    // or Simply Restart
+    ESP.restart();
+  }
+}
